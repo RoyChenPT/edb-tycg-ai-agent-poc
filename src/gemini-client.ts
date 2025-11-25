@@ -12,41 +12,34 @@ if (!apiKey) {
 
 const genAI = new GoogleGenAI({ apiKey });
 
-export async function generateContent(prompt: string, fileData?: { mimeType: string; data: Buffer }) {
+export async function generateContent(prompt: string, filesData: Array<{ mimeType: string; data: Buffer | string }> = []) {
   const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
   try {
-    let response;
-    if (fileData) {
-      const imagePart = {
-        inlineData: {
-          data: fileData.data.toString("base64"),
-          mimeType: fileData.mimeType,
-        },
-      };
-      response = await genAI.models.generateContent({
-        model: modelName,
-        contents: [
-            {
-                role: "user",
-                parts: [
-                    { text: prompt },
-                    imagePart
-                ]
-            }
-        ]
-      });
-    } else {
-      response = await genAI.models.generateContent({
-        model: modelName,
-        contents: [
-            {
-                role: "user",
-                parts: [{ text: prompt }]
-            }
-        ]
-      });
+    const parts: any[] = [{ text: prompt }];
+
+    for (const file of filesData) {
+        if (Buffer.isBuffer(file.data)) {
+            parts.push({
+                inlineData: {
+                    data: file.data.toString("base64"),
+                    mimeType: file.mimeType,
+                },
+            });
+        } else if (typeof file.data === 'string') {
+            parts.push({ text: `\n\n[Document Content]\n${file.data}` });
+        }
     }
+
+    const response = await genAI.models.generateContent({
+      model: modelName,
+      contents: [
+          {
+              role: "user",
+              parts: parts
+          }
+      ]
+    });
     
     // Check response structure for @google/genai
     if (response.candidates && response.candidates.length > 0) {

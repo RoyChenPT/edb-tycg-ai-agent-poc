@@ -7,11 +7,12 @@ dotenv.config();
 import fs from "fs/promises";
 
 async function main() {
-  const filePath = process.env.TARGET_FILE_PATH;
+  const targetPaths = process.env.TARGET_FILE_PATH || "";
+  const filePaths = targetPaths.split(',').map(p => p.trim()).filter(p => p.length > 0);
   const promptFilePath = process.env.PROMPT_FILE_PATH;
 
-  if (!filePath) {
-    console.error("Error: TARGET_FILE_PATH is not defined in environment variables.");
+  if (filePaths.length === 0) {
+    console.error("Error: No valid file paths found in TARGET_FILE_PATH.");
     process.exit(1);
   }
 
@@ -28,28 +29,35 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Processing file: ${filePath}`);
   console.log(`Using Model: ${process.env.GEMINI_MODEL || "gemini-1.5-flash"}`);
   console.log(`Prompt loaded from: ${promptFilePath}`);
 
-  try {
-    const { content, mimeType } = await readFileContent(filePath);
+  const filesData: Array<{ mimeType: string; data: Buffer | string }> = [];
 
-    let responseText;
-    if (typeof content === 'string') {
-         const fullPrompt = `${prompt}\n\nDocument Content:\n${content}`;
-         responseText = await generateContent(fullPrompt);
-    } else {
-        // Always send as file data (Buffer)
-        responseText = await generateContent(prompt, { mimeType, data: content });
+  for (const filePath of filePaths) {
+    console.log(`Processing file: ${filePath}`);
+    try {
+      const { content, mimeType } = await readFileContent(filePath);
+      filesData.push({ mimeType, data: content });
+    } catch (error) {
+      console.error(`An error occurred while reading ${filePath}:`, error);
     }
+  }
 
-    console.log("\n--- Gemini AI Response ---\n");
-    console.log(responseText);
-    console.log("\n--------------------------\n");
+  if (filesData.length === 0) {
+      console.log("No files to process.");
+      return;
+  }
 
+  try {
+      console.log("Sending request to Gemini AI...");
+      const responseText = await generateContent(prompt, filesData);
+
+      console.log("\n--- Gemini AI Response ---\n");
+      console.log(responseText);
+      console.log("\n--------------------------\n");
   } catch (error) {
-    console.error("An error occurred:", error);
+      console.error("An error occurred during AI generation:", error);
   }
 }
 
