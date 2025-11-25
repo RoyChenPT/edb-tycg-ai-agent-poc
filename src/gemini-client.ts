@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -10,14 +10,13 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const genAI = new GoogleGenerativeAI(apiKey);
+const genAI = new GoogleGenAI({ apiKey });
 
 export async function generateContent(prompt: string, fileData?: { mimeType: string; data: Buffer }) {
   const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-  const model = genAI.getGenerativeModel({ model: modelName });
 
   try {
-    let result;
+    let response;
     if (fileData) {
       const imagePart = {
         inlineData: {
@@ -25,12 +24,44 @@ export async function generateContent(prompt: string, fileData?: { mimeType: str
           mimeType: fileData.mimeType,
         },
       };
-      result = await model.generateContent([prompt, imagePart]);
+      response = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+            {
+                role: "user",
+                parts: [
+                    { text: prompt },
+                    imagePart
+                ]
+            }
+        ]
+      });
     } else {
-      result = await model.generateContent(prompt);
+      response = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+            {
+                role: "user",
+                parts: [{ text: prompt }]
+            }
+        ]
+      });
     }
-    const response = await result.response;
-    return response.text();
+    
+    // Check response structure for @google/genai
+    if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+            return candidate.content.parts[0].text;
+        }
+    } 
+    
+    if (response.text) {
+        return response.text;
+    } else {
+        return JSON.stringify(response, null, 2);
+    }
+
   } catch (error) {
     console.error("Error generating content:", error);
     throw error;
